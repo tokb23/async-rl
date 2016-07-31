@@ -2,9 +2,9 @@
 
 import gym
 import random
-import threading
 import numpy as np
 import tensorflow as tf
+from threading import Thread
 from skimage.color import rgb2gray
 from skimage.transform import resize
 from keras.models import Model
@@ -14,15 +14,17 @@ ENV_NAME = 'Breakout-v0'  # Environment name
 FRAME_WIDTH = 84  # Resized frame width
 FRAME_HEIGHT = 84  # Resized frame height
 STATE_LENGTH = 4  # Number of most recent frames to produce the input to the network
-LEARNING_RATE = 0.00025  # Learning rate used by RMSProp
+LEARNING_RATE = 0.0007  # Learning rate used by RMSProp
+DECAY = 0.99  # decay factor used by RMSProp
 MOMENTUM = 0.95  # Momentum used by RMSProp
-MIN_GRAD = 0.01  # Constant added to the squared gradient in the denominator of the RMSProp update
+MIN_GRAD = 0.1  # Constant added to the squared gradient in the denominator of the RMSProp update
 NO_OP_STEPS = 30  # Maximum number of "do nothing" actions to be performed by the agent at the start of an episode
 ACTION_INTERVAL = 4  # The agent sees only every 4th input
 GAMMA = 0.99  # Discount factor
+# ENTROPY_BETA = 0.01
 NUM_THREADS = 2  # Number of thread
-GLOBAL_T_MAX = 30000000
-THREAD_T_MAX = 32
+GLOBAL_T_MAX = 320000000
+THREAD_T_MAX = 5
 TRAIN = True
 
 
@@ -66,12 +68,14 @@ class Agent():
         # Convert action to one hot vector
         a_one_hot = tf.one_hot(a, self.num_actions, 1.0, 0.0)
         log_prob = tf.log(tf.reduce_sum(tf.mul(self.action_probs, a_one_hot), reduction_indices=1))
+        # entropy = tf.reduce_sum(self.action_probs * tf.log(self.action_probs), reduction_indices=1)
 
+        # p_loss = -(log_prob * (r - self.state_value) + ENTROPY_BETA * entropy)
         p_loss = -log_prob * (r - self.state_value)
         v_loss = tf.reduce_mean(tf.square(r - self.state_value))
         loss = p_loss + 0.5 * v_loss
 
-        optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE, momentum=MOMENTUM, epsilon=MIN_GRAD)
+        optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE, decay=DECAY, momentum=MOMENTUM, epsilon=MIN_GRAD)
         grad_update = optimizer.minimize(loss)
 
         return a, r, grad_update
@@ -79,7 +83,7 @@ class Agent():
     def get_initial_state(self, observation, last_observation):
         processed_observation = np.maximum(observation, last_observation)
         processed_observation = resize(rgb2gray(processed_observation), (FRAME_WIDTH, FRAME_HEIGHT))
-        state = [processed_observation for _ in xrange(STATE_LENGTH)]
+        state = [processed_observation for _ in range(STATE_LENGTH)]
         return np.stack(state, axis=0)
 
     def get_action(self, state, t):
@@ -123,7 +127,7 @@ def actor_learner_thread(thread_id, env, agent):
 
     terminal = False
     observation = env.reset()
-    for _ in xrange(random.randint(1, NO_OP_STEPS)):
+    for _ in range(random.randint(1, NO_OP_STEPS)):
         last_observation = observation
         observation, _, _, _ = env.step(0)  # Do nothing
     state = agent.get_initial_state(observation, last_observation)
@@ -163,7 +167,7 @@ def actor_learner_thread(thread_id, env, agent):
 
             terminal = False
             observation = env.reset()
-            for _ in xrange(random.randint(1, NO_OP_STEPS)):
+            for _ in range(random.randint(1, NO_OP_STEPS)):
                 last_observation = observation
                 observation, _, _, _ = env.step(0)  # Do nothing
             state = agent.get_initial_state(observation, last_observation)
@@ -176,11 +180,11 @@ def preprocess(observation, last_observation):
 
 
 def main():
-    envs = [gym.make(ENV_NAME) for _ in xrange(NUM_THREADS)]
+    envs = [gym.make(ENV_NAME) for _ in range(NUM_THREADS)]
     agent = Agent(num_actions=envs[0].action_space.n)
 
     if TRAIN:
-        actor_learner_threads = [threading.Thread(target=actor_learner_thread, args=(i, envs[i], agent)) for i in range(NUM_THREADS)]
+        actor_learner_threads = [Thread(target=actor_learner_thread, args=(i, envs[i], agent)) for i in range(NUM_THREADS)]
 
         for thread in actor_learner_threads:
             thread.start()
