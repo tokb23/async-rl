@@ -21,8 +21,8 @@ MIN_GRAD = 0.1  # Constant added to the squared gradient in the denominator of t
 NO_OP_STEPS = 30  # Maximum number of "do nothing" actions to be performed by the agent at the start of an episode
 ACTION_INTERVAL = 4  # The agent sees only every 4th input
 GAMMA = 0.99  # Discount factor
-# ENTROPY_BETA = 0.01
-NUM_THREADS = 2  # Number of thread
+ENTROPY_BETA = 0.01
+NUM_THREADS = 1  # Number of thread
 GLOBAL_T_MAX = 320000000
 THREAD_T_MAX = 5
 TRAIN = True
@@ -68,10 +68,9 @@ class Agent():
         # Convert action to one hot vector
         a_one_hot = tf.one_hot(a, self.num_actions, 1.0, 0.0)
         log_prob = tf.log(tf.reduce_sum(tf.mul(self.action_probs, a_one_hot), reduction_indices=1))
-        # entropy = tf.reduce_sum(self.action_probs * tf.log(self.action_probs), reduction_indices=1)
+        entropy = tf.reduce_sum(-1 * self.action_probs * tf.log(self.action_probs), reduction_indices=1)
 
-        # p_loss = -(log_prob * (r - self.state_value) + ENTROPY_BETA * entropy)
-        p_loss = -log_prob * (r - self.state_value)
+        p_loss = tf.reduce_mean(-1 * (log_prob * (r - self.state_value) + ENTROPY_BETA * entropy))
         v_loss = tf.reduce_mean(tf.square(r - self.state_value))
         loss = p_loss + 0.5 * v_loss
 
