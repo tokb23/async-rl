@@ -22,13 +22,14 @@ NO_OP_STEPS = 30  # Maximum number of "do nothing" actions to be performed by th
 ACTION_INTERVAL = 4  # The agent sees only every 4th input
 GAMMA = 0.99  # Discount factor
 ENTROPY_BETA = 0.01  # Entropy weight
-NUM_THREADS = 1  # Number of thread
+NUM_THREADS = 2  # Number of thread
 GLOBAL_T_MAX = 320000000  # Number of time steps we train
 THREAD_T_MAX = 5  # The frequency with which the policy and the value function are updated
+SAVE_INTERVAL = 500000  # The frequency with which the network is saved
 TRAIN = True
 LOAD_NETWORK = False
-SAVE_INTERVAL = 500000
 SAVE_NETWORK_PATH = 'saved_networks/' + ENV_NAME
+SAVE_SUMMARY_PATH = 'summary/' + ENV_NAME
 
 
 class Agent():
@@ -40,10 +41,12 @@ class Agent():
         self.s, self.action_probs, self.state_value = self.build_networks()
 
         # Define loss and gradient update operation
-        self.a, self.r, self.lr, self.grad_update = self.build_training_op()
+        self.a, self.r, self.lr, self.loss, self.grad_update = self.build_training_op()
 
         self.sess = tf.InteractiveSession()
         self.saver = tf.train.Saver()
+        self.summary_placeholders, self.update_ops, self.summary_op = self.setup_summary()
+        self.summary_writer = tf.train.SummaryWriter(SAVE_SUMMARY_PATH, self.sess.graph)
 
         if not os.path.exists(SAVE_NETWORK_PATH):
             os.makedirs(SAVE_NETWORK_PATH)
@@ -91,7 +94,7 @@ class Agent():
         optimizer = tf.train.RMSPropOptimizer(lr, decay=DECAY, epsilon=MIN_GRAD)
         grad_update = optimizer.minimize(loss)
 
-        return a, r, lr, grad_update
+        return a, r, lr, loss, grad_update
 
     def get_initial_state(self, observation, last_observation):
         processed_observation = np.maximum(observation, last_observation)
@@ -126,12 +129,14 @@ class Agent():
             r = reward_batch[i - t_start] + GAMMA * r
             r_batch[i - t_start] = r
 
-        self.sess.run(self.grad_update, feed_dict={
+        loss, _ = self.sess.run([self.loss, self.grad_update], feed_dict={
             self.s: state_batch,
             self.a: action_batch,
             self.r: r_batch,
             self.lr: learning_rate
         })
+
+        return loss
 
     def save_network(self, global_t):
         save_path = self.saver.save(self.sess, SAVE_NETWORK_PATH + '/' + ENV_NAME, global_step=(global_t))
@@ -145,13 +150,41 @@ class Agent():
         else:
             print('Training new network...')
 
+    def write_summary(self, total_reward, duration, episode, total_loss):
+        stats = [total_reward, duration, sum(total_loss) / len(total_loss)]
+        for i in range(len(stats)):
+            self.sess.run(self.update_ops[i], feed_dict={
+                self.summary_placeholders[i]: float(stats[i])
+            })
+        summary_str = self.sess.run(self.summary_op)
+        self.summary_writer.add_summary(summary_str, global_episode + 1)
+
+    def setup_summary(self):
+        episode_total_reward = tf.Variable(0.)
+        tf.scalar_summary(ENV_NAME + '/Total Reward/Episode', episode_total_reward)
+        episode_duration = tf.Variable(0.)
+        tf.scalar_summary(ENV_NAME + '/Duration/Episode', episode_duration)
+        episode_avg_loss = tf.Variable(0.)
+        tf.scalar_summary(ENV_NAME + '/Average Loss/Episode', episode_avg_loss)
+        summary_vars = [episode_total_reward, episode_duration, episode_avg_loss]
+        summary_placeholders = [tf.placeholder(tf.float32) for _ in range(len(summary_vars))]
+        update_ops = [summary_vars[i].assign(summary_placeholders[i]) for i in range(len(summary_vars))]
+        summary_op = tf.merge_all_summaries()
+        return summary_placeholders, update_ops, summary_op
+
 
 def actor_learner_thread(thread_id, env, agent):
-    global global_t, learning_rate
+    global global_t, learning_rate, global_episode
     global_t = 0
     t = 0
     learning_rate = INITIAL_LEARNING_RATE
     lr_step = INITIAL_LEARNING_RATE / GLOBAL_T_MAX
+
+    total_reward = 0
+    total_loss = []
+    duration = 0
+    global_episode = 0
+    episode = 0
 
     terminal = False
     observation = env.reset()
@@ -185,6 +218,9 @@ def actor_learner_thread(thread_id, env, agent):
             t += 1
             global_t += 1
 
+            total_reward += reward
+            duration += 1
+
             # Anneal learning rate linearly over time
             learning_rate -= lr_step
             if learning_rate < 0.0:
@@ -192,15 +228,26 @@ def actor_learner_thread(thread_id, env, agent):
 
             state = next_state
 
-        agent.run(state, terminal, t, t_start, state_batch, action_batch, reward_batch, learning_rate)
+        loss = agent.run(state, terminal, t, t_start, state_batch, action_batch, reward_batch, learning_rate)
+        total_loss.append(loss)
 
         # Save network
         if global_t % SAVE_INTERVAL == 0:
             agent.save_network(global_t)
 
         if terminal:
+            # Write summary
+            agent.write_summary(total_reward, duration, global_episode, total_loss)
+
             # Debug
-            print('THREAD: {0} / LOCAL_TIME: {1} / GLOBAL_TIME {2}'.format(thread_id, t, global_t))
+            print('THREAD: {0:2d} / EPISODE: {1:4d} / GLOBAL_EPISODE: {2:6d} / LOCAL_TIME: {3:8d} / DURATION: {4:5d} / GLOBAL_TIME: {5:10d} / TOTAL_REWARD: {6:3.0f} / AVG_LOSS: {7:.5f}'.format(
+                thread_id, episode + 1, global_episode + 1, t, duration, global_t, total_reward, sum(total_loss) / len(total_loss)))
+
+            total_reward = 0
+            total_loss = []
+            duration = 0
+            episode += 1
+            global_episode += 1
 
             terminal = False
             observation = env.reset()
