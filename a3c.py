@@ -15,15 +15,15 @@ FRAME_WIDTH = 84  # Resized frame width
 FRAME_HEIGHT = 84  # Resized frame height
 STATE_LENGTH = 4  # Number of most recent frames to produce the input to the network
 INITIAL_LEARNING_RATE = 0.0007  # Initial learning rate used by RMSProp
-DECAY = 0.99  # decay factor used by RMSProp
+DECAY = 0.99  # Decay factor used by RMSProp
 MIN_GRAD = 0.1  # Constant added to the squared gradient in the denominator of the RMSProp update
 NO_OP_STEPS = 30  # Maximum number of "do nothing" actions to be performed by the agent at the start of an episode
 ACTION_INTERVAL = 4  # The agent sees only every 4th input
 GAMMA = 0.99  # Discount factor
-ENTROPY_BETA = 0.01
+ENTROPY_BETA = 0.01  # Entropy weight
 NUM_THREADS = 1  # Number of thread
-GLOBAL_T_MAX = 320000000
-THREAD_T_MAX = 5
+GLOBAL_T_MAX = 320000000  # Number of time steps we train
+THREAD_T_MAX = 5  # The frequency with which the policy and the value function are updated
 TRAIN = True
 
 
@@ -104,27 +104,27 @@ class Agent():
 
     def run(self, state, terminal, t, t_start, state_batch, action_batch, reward_batch, learning_rate):
         if terminal:
-            R = 0
+            r = 0
         else:
-            R = self.sess.run(self.state_value, feed_dict={self.s: [state]})[0]
+            r = self.sess.run(self.state_value, feed_dict={self.s: [state]})[0]
 
-        R_batch = np.zeros(t - t_start)
+        r_batch = np.zeros(t - t_start)
 
         for i in reversed(range(t_start, t)):
-            R = reward_batch[i - t_start] + GAMMA * R
-            R_batch[i - t_start] = R
+            r = reward_batch[i - t_start] + GAMMA * r
+            r_batch[i - t_start] = r
 
         self.sess.run(self.grad_update, feed_dict={
             self.s: state_batch,
             self.a: action_batch,
-            self.r: R_batch,
+            self.r: r_batch,
             self.lr: learning_rate
         })
 
 
 def actor_learner_thread(thread_id, env, agent):
-    global T, learning_rate
-    T = 0
+    global global_t, learning_rate
+    global_t = 0
     t = 0
     learning_rate = INITIAL_LEARNING_RATE
     lr_step = INITIAL_LEARNING_RATE / GLOBAL_T_MAX
@@ -136,7 +136,7 @@ def actor_learner_thread(thread_id, env, agent):
         observation, _, _, _ = env.step(0)  # Do nothing
     state = agent.get_initial_state(observation, last_observation)
 
-    while T < GLOBAL_T_MAX:
+    while global_t < GLOBAL_T_MAX:
         t_start = t
 
         state_batch = []
@@ -159,7 +159,7 @@ def actor_learner_thread(thread_id, env, agent):
             next_state = np.append(state[1:, :, :], processed_observation, axis=0)
 
             t += 1
-            T += 1
+            global_t += 1
 
             # Anneal learning rate linearly over time
             learning_rate -= lr_step
@@ -172,7 +172,7 @@ def actor_learner_thread(thread_id, env, agent):
 
         if terminal:
             # Debug
-            print('THREAD: {0} / TIMESTEP: {1} / GLOBAL_TIME {2}'.format(thread_id, t, T))
+            print('THREAD: {0} / LOCAL_TIME: {1} / GLOBAL_TIME {2}'.format(thread_id, t, global_t))
 
             terminal = False
             observation = env.reset()
