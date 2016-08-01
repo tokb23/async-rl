@@ -14,7 +14,7 @@ ENV_NAME = 'Breakout-v0'  # Environment name
 FRAME_WIDTH = 84  # Resized frame width
 FRAME_HEIGHT = 84  # Resized frame height
 STATE_LENGTH = 4  # Number of most recent frames to produce the input to the network
-LEARNING_RATE = 0.0007  # Learning rate used by RMSProp
+INITIAL_LEARNING_RATE = 0.0007  # Initial learning rate used by RMSProp
 DECAY = 0.99  # decay factor used by RMSProp
 MIN_GRAD = 0.1  # Constant added to the squared gradient in the denominator of the RMSProp update
 NO_OP_STEPS = 30  # Maximum number of "do nothing" actions to be performed by the agent at the start of an episode
@@ -36,7 +36,7 @@ class Agent():
         self.s, self.action_probs, self.state_value = self.build_networks()
 
         # Define loss and gradient update operation
-        self.a, self.r, self.grad_update = self.build_training_op()
+        self.a, self.r, self.lr, self.grad_update = self.build_training_op()
 
         self.sess = tf.InteractiveSession()
 
@@ -63,6 +63,7 @@ class Agent():
     def build_training_op(self):
         a = tf.placeholder(tf.int64, [None])
         r = tf.placeholder(tf.float32, [None])
+        lr = tf.placeholder(tf.float32)
 
         # Convert action to one hot vector
         a_one_hot = tf.one_hot(a, self.num_actions, 1.0, 0.0)
@@ -75,10 +76,10 @@ class Agent():
         v_loss = tf.square(advantage)
         loss = tf.reduce_mean(p_loss + 0.5 * v_loss)
 
-        optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE, decay=DECAY, epsilon=MIN_GRAD)
+        optimizer = tf.train.RMSPropOptimizer(lr, decay=DECAY, epsilon=MIN_GRAD)
         grad_update = optimizer.minimize(loss)
 
-        return a, r, grad_update
+        return a, r, lr, grad_update
 
     def get_initial_state(self, observation, last_observation):
         processed_observation = np.maximum(observation, last_observation)
@@ -89,7 +90,7 @@ class Agent():
     def get_action(self, state, t):
         action = self.repeated_action
 
-        if (t - 1) % ACTION_INTERVAL == 0:
+        if t % ACTION_INTERVAL == 0:
             probs = self.sess.run(self.action_probs, feed_dict={self.s: [state]})[0]
 
             # Subtract a tiny value from probabilities in order to avoid 'ValueError: sum(pvals[:-1]) > 1.0' in np.random.multinomial
@@ -101,7 +102,7 @@ class Agent():
 
         return action
 
-    def run(self, state, terminal, t, t_start, state_batch, action_batch, reward_batch):
+    def run(self, state, terminal, t, t_start, state_batch, action_batch, reward_batch, learning_rate):
         if terminal:
             R = 0
         else:
@@ -116,14 +117,17 @@ class Agent():
         self.sess.run(self.grad_update, feed_dict={
             self.s: state_batch,
             self.a: action_batch,
-            self.r: R_batch
+            self.r: R_batch,
+            self.lr: learning_rate
         })
 
 
 def actor_learner_thread(thread_id, env, agent):
-    global T
+    global T, learning_rate
     T = 0
-    t = 1
+    t = 0
+    learning_rate = INITIAL_LEARNING_RATE
+    lr_step = INITIAL_LEARNING_RATE / GLOBAL_T_MAX
 
     terminal = False
     observation = env.reset()
@@ -157,9 +161,14 @@ def actor_learner_thread(thread_id, env, agent):
             t += 1
             T += 1
 
+            # Anneal learning rate linearly over time
+            learning_rate -= lr_step
+            if learning_rate < 0.0:
+                learning_rate = 0.0
+
             state = next_state
 
-        agent.run(state, terminal, t, t_start, state_batch, action_batch, reward_batch)
+        agent.run(state, terminal, t, t_start, state_batch, action_batch, reward_batch, learning_rate)
 
         if terminal:
             # Debug
