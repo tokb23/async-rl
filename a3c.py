@@ -16,7 +16,6 @@ FRAME_HEIGHT = 84  # Resized frame height
 STATE_LENGTH = 4  # Number of most recent frames to produce the input to the network
 LEARNING_RATE = 0.0007  # Learning rate used by RMSProp
 DECAY = 0.99  # decay factor used by RMSProp
-MOMENTUM = 0.95  # Momentum used by RMSProp
 MIN_GRAD = 0.1  # Constant added to the squared gradient in the denominator of the RMSProp update
 NO_OP_STEPS = 30  # Maximum number of "do nothing" actions to be performed by the agent at the start of an episode
 ACTION_INTERVAL = 4  # The agent sees only every 4th input
@@ -68,13 +67,15 @@ class Agent():
         # Convert action to one hot vector
         a_one_hot = tf.one_hot(a, self.num_actions, 1.0, 0.0)
         log_prob = tf.log(tf.reduce_sum(tf.mul(self.action_probs, a_one_hot), reduction_indices=1))
-        entropy = tf.reduce_sum(-1 * self.action_probs * tf.log(self.action_probs), reduction_indices=1)
+        entropy = -tf.reduce_sum(self.action_probs * tf.log(self.action_probs), reduction_indices=1)
 
-        p_loss = tf.reduce_mean(-1 * (log_prob * (r - self.state_value) + ENTROPY_BETA * entropy))
-        v_loss = tf.reduce_mean(tf.square(r - self.state_value))
-        loss = p_loss + 0.5 * v_loss
+        advantage = r - self.state_value
 
-        optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE, decay=DECAY, momentum=MOMENTUM, epsilon=MIN_GRAD)
+        p_loss = -(log_prob * advantage + ENTROPY_BETA * entropy)
+        v_loss = tf.square(advantage)
+        loss = tf.reduce_mean(p_loss + 0.5 * v_loss)
+
+        optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE, decay=DECAY, epsilon=MIN_GRAD)
         grad_update = optimizer.minimize(loss)
 
         return a, r, grad_update
