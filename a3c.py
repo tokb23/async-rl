@@ -1,5 +1,6 @@
 # coding:utf-8
 
+import os
 import gym
 import random
 import numpy as np
@@ -25,6 +26,9 @@ NUM_THREADS = 1  # Number of thread
 GLOBAL_T_MAX = 320000000  # Number of time steps we train
 THREAD_T_MAX = 5  # The frequency with which the policy and the value function are updated
 TRAIN = True
+LOAD_NETWORK = False
+SAVE_INTERVAL = 500000
+SAVE_NETWORK_PATH = 'saved_networks/' + ENV_NAME
 
 
 class Agent():
@@ -39,8 +43,16 @@ class Agent():
         self.a, self.r, self.lr, self.grad_update = self.build_training_op()
 
         self.sess = tf.InteractiveSession()
+        self.saver = tf.train.Saver()
+
+        if not os.path.exists(SAVE_NETWORK_PATH):
+            os.makedirs(SAVE_NETWORK_PATH)
 
         self.sess.run(tf.initialize_all_variables())
+
+        # Load network
+        if LOAD_NETWORK:
+            self.load_network()
 
     def build_networks(self):
         s_in = Input(shape=(STATE_LENGTH, FRAME_WIDTH, FRAME_HEIGHT))
@@ -121,6 +133,18 @@ class Agent():
             self.lr: learning_rate
         })
 
+    def save_network(self, global_t):
+        save_path = self.saver.save(self.sess, SAVE_NETWORK_PATH + '/' + ENV_NAME, global_step=(global_t))
+        print('Successfully saved: ' + save_path)
+
+    def load_network(self):
+        checkpoint = tf.train.get_checkpoint_state(SAVE_NETWORK_PATH)
+        if checkpoint and checkpoint.model_checkpoint_path:
+            self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
+            print('Successfully loaded: ' + checkpoint.model_checkpoint_path)
+        else:
+            print('Training new network...')
+
 
 def actor_learner_thread(thread_id, env, agent):
     global global_t, learning_rate
@@ -169,6 +193,10 @@ def actor_learner_thread(thread_id, env, agent):
             state = next_state
 
         agent.run(state, terminal, t, t_start, state_batch, action_batch, reward_batch, learning_rate)
+
+        # Save network
+        if global_t % SAVE_INTERVAL == 0:
+            agent.save_network(global_t)
 
         if terminal:
             # Debug
