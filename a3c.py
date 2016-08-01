@@ -2,6 +2,7 @@
 
 import os
 import gym
+import time
 import random
 import numpy as np
 import tensorflow as tf
@@ -23,7 +24,7 @@ ACTION_INTERVAL = 4  # The agent sees only every 4th input
 GAMMA = 0.99  # Discount factor
 ENTROPY_BETA = 0.01  # Entropy weight
 NUM_THREADS = 2  # Number of thread
-GLOBAL_T_MAX = 320000000  # Number of time steps we train
+GLOBAL_T_MAX = 5000000  # Number of time steps we train
 THREAD_T_MAX = 5  # The frequency with which the policy and the value function are updated
 SAVE_INTERVAL = 500000  # The frequency with which the network is saved
 TRAIN = True
@@ -139,7 +140,7 @@ class Agent():
         return loss
 
     def save_network(self, global_t):
-        save_path = self.saver.save(self.sess, SAVE_NETWORK_PATH + '/' + ENV_NAME, global_step=(global_t))
+        save_path = self.saver.save(self.sess, SAVE_NETWORK_PATH + '/' + ENV_NAME, global_step=global_t)
         print('Successfully saved: ' + save_path)
 
     def load_network(self):
@@ -185,6 +186,9 @@ def actor_learner_thread(thread_id, env, agent):
     duration = 0
     global_episode = 0
     episode = 0
+
+    # Delay
+    time.sleep(3 * thread_id)
 
     terminal = False
     observation = env.reset()
@@ -241,7 +245,7 @@ def actor_learner_thread(thread_id, env, agent):
 
             # Debug
             print('THREAD: {0:2d} / EPISODE: {1:4d} / GLOBAL_EPISODE: {2:6d} / LOCAL_TIME: {3:8d} / DURATION: {4:5d} / GLOBAL_TIME: {5:10d} / TOTAL_REWARD: {6:3.0f} / AVG_LOSS: {7:.5f}'.format(
-                thread_id, episode + 1, global_episode + 1, t, duration, global_t, total_reward, sum(total_loss) / len(total_loss)))
+                thread_id + 1, episode + 1, global_episode + 1, t, duration, global_t, total_reward, sum(total_loss) / len(total_loss)))
 
             total_reward = 0
             total_loss = []
