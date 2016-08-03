@@ -3,6 +3,9 @@
 import numpy as np
 import tensorflow as tf
 
+FRAME_WIDTH = 84
+FRAME_HEIGHT = 84
+STATE_LENGTH = 4
 ENTROPY_BETA = 0.01
 
 
@@ -71,7 +74,7 @@ class A3CFF(Network):
     def __init__(self, num_actions):
         Network.__init__(self, num_actions)
 
-        self.W_conv1 = self.conv_weight_variable([8, 8, 4, 16])
+        self.W_conv1 = self.conv_weight_variable([8, 8, STATE_LENGTH, 16])
         self.b_conv1 = self.conv_bias_variable([16], 8, 8, 4)
 
         self.W_conv2 = self.conv_weight_variable([4, 4, 16, 32])
@@ -86,7 +89,7 @@ class A3CFF(Network):
         self.W_fc3 = self.fc_weight_variable([256, 1])
         self.b_fc3 = self.fc_bias_variable([1], 256)
 
-        self.s = tf.placeholder(tf.float32, [None, 84, 84, 4])
+        self.s = tf.placeholder(tf.float32, [None, FRAME_WIDTH, FRAME_HEIGHT, STATE_LENGTH])
 
         h_conv1 = tf.nn.relu(self.conv2d(self.s, self.W_conv1, 4) + self.b_conv1)
         h_conv2 = tf.nn.relu(self.conv2d(h_conv1, self.W_conv2, 2) + self.b_conv2)
