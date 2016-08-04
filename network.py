@@ -97,7 +97,7 @@ class A3CFF(Network):
         h_conv2_flat = tf.reshape(h_conv2, [-1, 2592])
         h_fc1 = tf.nn.relu(tf.matmul(h_conv2_flat, self.W_fc1) + self.b_fc1)
 
-        self.pi = tf.nn.softmax(tf.matmul(h_fc1, self.self.W_fc2) + self.b_fc2)
+        self.pi = tf.nn.softmax(tf.matmul(h_fc1, self.W_fc2) + self.b_fc2)
         v_ = tf.matmul(h_fc1, self.W_fc3) + self.b_fc3
         self.v = tf.reshape(v_, [-1])  # !
 
