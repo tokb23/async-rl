@@ -9,19 +9,18 @@ from skimage.transform import resize
 
 from network import A3CFF
 
-ENV_NAME = 'Breakout-v0'
-FRAME_WIDTH = 84
-FRAME_HEIGHT = 84
-STATE_LENGTH = 4
-GAMMA = 0.99
-LOCAL_T_MAX = 5
-ENTROPY_BETA = 0.01
-INITIAL_LEARNING_RATE = 0.007
-GLOBAL_T_MAX = 10000000
-NO_OP_STEPS = 30
-ACTION_INTERVAL = 4
-SAVE_INTERVAL = 500000
-SAVE_NETWORK_PATH = 'saved_networks/' + ENV_NAME
+from constant import ENV_NAME
+from constant import FRAME_WIDTH
+from constant import FRAME_HEIGHT
+from constant import STATE_LENGTH
+from constant import GLOBAL_T_MAX
+from constant import LOCAL_T_MAX
+from constant import GAMMA
+from constant import INITIAL_LEARNING_RATE
+from constant import ACTION_INTERVAL
+from constant import NO_OP_STEPS
+from constant import SAVE_INTERVAL
+from constant import SAVE_NETWORK_PATH
 
 
 class Agent(object):

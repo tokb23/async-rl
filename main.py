@@ -8,19 +8,14 @@ from threading import Thread
 from network import A3CFF
 from agent import Agent
 
-FRAME_WIDTH = 84
-FRAME_HEIGHT = 84
-STATE_LENGTH = 4
-NO_OP_STEPS = 30
-ENV_NAME = 'Breakout-v0'
-NUM_THREADS = 3
-GLOBAL_T_MAX = 10000000
-RMSP_ALPHA = 0.99
-RMSP_EPSILON = 0.1
-SAVE_NETWORK_PATH = 'saved_networks/' + ENV_NAME
-SAVE_SUMMARY_PATH = 'summary/' + ENV_NAME
-LOAD_NETWORK = False
-DISPLAY = False
+from constant import ENV_NAME
+from constant import NUM_THREADS
+from constant import RMSP_ALPHA
+from constant import RMSP_EPSILON
+from constant import SAVE_NETWORK_PATH
+from constant import SAVE_SUMMARY_PATH
+from constant import LOAD_NETWORK = False
+from constant import DISPLAY = False
 
 
 def load_network(sess, saver):

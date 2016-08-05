@@ -3,10 +3,10 @@
 import numpy as np
 import tensorflow as tf
 
-FRAME_WIDTH = 84
-FRAME_HEIGHT = 84
-STATE_LENGTH = 4
-ENTROPY_BETA = 0.01
+from constant import FRAME_WIDTH = 84
+from constant import FRAME_HEIGHT = 84
+from constant import STATE_LENGTH = 4
+from constant import ENTROPY_BETA = 0.01
 
 
 class Network(object):
