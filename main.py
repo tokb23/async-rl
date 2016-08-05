@@ -3,6 +3,7 @@
 import os
 import gym
 import random
+import numpy as np
 import tensorflow as tf
 from threading import Thread
 from skimage.color import rgb2gray
@@ -12,19 +13,21 @@ from network import A3CFF
 from agent import Agent
 from optimizer import RMSPropApplier
 
+FRAME_WIDTH = 84
+FRAME_HEIGHT = 84
+STATE_LENGTH = 4
 NO_OP_STEPS = 30
 ENV_NAME = 'Breakout-v0'
-NUM_THREADS = 2
+NUM_THREADS = 1
 GLOBAL_T_MAX = 10000000
 RMSP_ALPHA = 0.99
 RMSP_EPSILON = 0.1
 SAVE_NETWORK_PATH = 'saved_networks/' + ENV_NAME
-SAVE_SUMMARY_PATH = 'summary/' + ENV_NAME
 LOAD_NETWORK = False
-DISPLAY = True
+DISPLAY = False
 
 
-def load_network(self, sess, saver):
+def load_network(sess, saver):
     checkpoint = tf.train.get_checkpoint_state(SAVE_NETWORK_PATH)
     if checkpoint and checkpoint.model_checkpoint_path:
         saver.restore(sess, checkpoint.model_checkpoint_path)
@@ -33,11 +36,11 @@ def load_network(self, sess, saver):
         print('Training new network...')
 
 
-def get_initial_state(self, observation, last_observation):
+def get_initial_state(observation, last_observation):
     processed_observation = np.maximum(observation, last_observation)
     processed_observation = resize(rgb2gray(processed_observation), (FRAME_WIDTH, FRAME_HEIGHT))
     state = [processed_observation for _ in range(STATE_LENGTH)]
-    return np.stack(state, axis=0)
+    return np.stack(state, axis=2)
 
 
 def actor_learner_thread(thread_index, agent, sess, saver, env):
@@ -75,8 +78,6 @@ def main():
 
     sess = tf.InteractiveSession()
     saver = tf.train.Saver(global_network.get_vars())
-    # summary_placeholders, update_ops, summary_op = setup_summary()
-    # summary_writer = tf.train.SummaryWriter(SAVE_SUMMARY_PATH, sess.graph)
 
     if not os.path.exists(SAVE_NETWORK_PATH):
         os.makedirs(SAVE_NETWORK_PATH)
@@ -88,7 +89,7 @@ def main():
 
     actor_learner_threads = []
     for i in range(NUM_THREADS):
-        actor_learner_threads.append(Thread(target=actor_learner_thread, args=(i, agent[i], sess, saver, envs[i])))
+        actor_learner_threads.append(Thread(target=actor_learner_thread, args=(i, agents[i], sess, saver, envs[i])))
 
     for thread in actor_learner_threads:
         thread.start()
