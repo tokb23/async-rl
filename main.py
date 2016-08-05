@@ -11,7 +11,6 @@ from skimage.transform import resize
 
 from network import A3CFF
 from agent import Agent
-from optimizer import RMSPropApplier
 
 FRAME_WIDTH = 84
 FRAME_HEIGHT = 84
@@ -66,10 +65,7 @@ def main():
     global_network = A3CFF(num_actions)
 
     lr_in = tf.placeholder(tf.float32)
-    optimizer = RMSPropApplier(learning_rate=lr_in,
-                            decay=RMSP_ALPHA,
-                            momentum=0.0,
-                            epsilon=RMSP_EPSILON)
+    optimizer = tf.train.RMSPropOptimizer(learning_rate=lr_in, decay=RMSP_ALPHA, momentum=0.0, epsilon=RMSP_EPSILON)
 
     agents = []
     for i in range(NUM_THREADS):

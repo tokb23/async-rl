@@ -27,9 +27,9 @@ class Agent(object):
         self.local_network = A3CFF(num_actions)
         self.local_network.build_training_op()
 
-        self.grads = tf.gradients(self.local_network.loss, self.local_network.get_vars())
-
-        self.apply_gradients = optimizer.apply_gradients(global_network.get_vars(), self.grads)
+        get_gradients = tf.gradients(self.local_network.loss, self.local_network.get_vars())
+        grads_and_vars = list(zip(get_gradients, global_network.get_vars()))
+        self.grad_update = optimizer.apply_gradients(grads_and_vars)
 
         self.sync = self.local_network.sync_from(global_network)
 
@@ -101,7 +101,7 @@ class Agent(object):
             R = rewards[i - self.local_t_start] + GAMMA * R
             R_batch[i - self.local_t_start] = R
 
-        sess.run(self.apply_gradients, feed_dict={
+        sess.run(self.grad_update, feed_dict={
             self.local_network.s: states,
             self.local_network.a: actions,
             self.local_network.r: R_batch,
