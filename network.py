@@ -20,7 +20,7 @@ class Network(object):
         # Convert action to one hot vector
         a_one_hot = tf.one_hot(self.a, self.num_actions, 1.0, 0.0)
 
-        # Avoid NaN by clipping when value in action_probs becomes zero
+        # Avoid NaN by clipping pi when its values become zero
         log_pi = tf.reduce_sum(tf.mul(tf.log(tf.clip_by_value(self.pi, 1e-20, 1.0)), a_one_hot), reduction_indices=1)
         entropy = -tf.reduce_sum(self.pi * tf.log(tf.clip_by_value(self.pi, 1e-20, 1.0)), reduction_indices=1)
 
@@ -30,17 +30,15 @@ class Network(object):
         v_loss = tf.square(advantage)
         self.loss = tf.reduce_mean(p_loss + 0.5 * v_loss)
 
-    def sync_from(self, src_network):
+    def sync_with(self, src_network):
         src_vars = src_network.get_vars()
         dst_vars = self.get_vars()
 
-        sync_ops = []
-
+        sync_op = []
         for src_var, dst_var in zip(src_vars, dst_vars):
-            sync_op = tf.assign(dst_var, src_var)
-            sync_ops.append(sync_op)
+            sync_op.append(tf.assign(dst_var, src_var))
 
-        return tf.group(*sync_ops)  # !
+        return sync_op
 
     def fc_weight_variable(self, shape):
         input_channels = shape[0]
@@ -98,21 +96,15 @@ class A3CFF(Network):
         h_fc1 = tf.nn.relu(tf.matmul(h_conv2_flat, self.W_fc1) + self.b_fc1)
 
         self.pi = tf.nn.softmax(tf.matmul(h_fc1, self.W_fc2) + self.b_fc2)
-        v_ = tf.matmul(h_fc1, self.W_fc3) + self.b_fc3
-        self.v = tf.reshape(v_, [-1])  # !
+        self.v = tf.matmul(h_fc1, self.W_fc3) + self.b_fc3
 
-    def get_policy_and_value(self, sess, state):
-        pi_out, v_out = sess.run([self.pi, self.v], feed_dict={self.s: [state]})
-        return pi_out[0], v_out[0]
-
-    def get_policy(self, sess, state):
+    def get_pi(self, sess, state):
         pi_out = sess.run(self.pi, feed_dict={self.s: [state]})
         return pi_out[0]
 
-    def get_value(self, sess, state):
+    def get_v(self, sess, state):
         v_out = sess.run(self.v, feed_dict={self.s: [state]})
         return v_out[0]
 
     def get_vars(self):
-        return [self.W_conv1, self.b_conv1, self.W_conv2, self.b_conv2,
-                self.W_fc1, self.b_fc1, self.W_fc2, self.b_fc2, self.W_fc3, self.b_fc3]
+        return [self.W_conv1, self.b_conv1, self.W_conv2, self.b_conv2, self.W_fc1, self.b_fc1, self.W_fc2, self.b_fc2, self.W_fc3, self.b_fc3]
