@@ -1,6 +1,5 @@
 # coding:utf-8
 
-import random
 import numpy as np
 from skimage.color import rgb2gray
 from skimage.transform import resize
@@ -43,21 +42,6 @@ class Agent(object):
 
         self.episode_reward = 0
 
-    def choose_action(self, pi_values):
-        values = []
-        sum = 0.0
-        for rate in pi_values:
-            sum = sum + rate
-            value = sum
-            values.append(value)
-
-        r = random.random() * sum
-        for i in range(len(values)):
-            if values[i] >= r:
-                return i
-        # fail safe
-        return len(values) - 1
-
     def get_action(self, pi):
         action = self.repeated_action
 
@@ -74,31 +58,29 @@ class Agent(object):
     def preprocess(self, observation, last_observation):
         processed_observation = np.maximum(observation, last_observation)
         processed_observation = resize(rgb2gray(processed_observation), (FRAME_WIDTH, FRAME_HEIGHT))
-        return np.reshape(processed_observation, (1, FRAME_WIDTH, FRAME_HEIGHT))
+        return np.reshape(processed_observation, (FRAME_WIDTH, FRAME_HEIGHT, 1))
 
     def process(self, sess, global_t, env, state, terminal, last_observation):
         states = []
         actions = []
         rewards = []
-        values = []
 
         sess.run(self.sync)
 
         self.local_t_start = self.local_t
 
         while not (terminal or ((self.local_t - self.local_t_start) == LOCAL_T_MAX)):
-            pi_, value_ = self.local_network.run_policy_and_value(sess, state)
+            pi_ = self.local_network.get_policy(sess, state)
             action = self.get_action(pi_)
 
             observation, reward, terminal, _ = env.step(action)
 
             states.append(state)
             actions.append(action)
-            values.append(value_)
             rewards.append(np.clip(reward, -1, 1))
 
             processed_observation = self.preprocess(observation, last_observation)
-            next_state = np.append(state[1:, :, :], processed_observation, axis=0)
+            next_state = np.append(state[:, :, 1:], processed_observation, axis=2)
 
             self.local_t += 1
 
@@ -111,7 +93,7 @@ class Agent(object):
         if terminal:
             R = 0
         else:
-            R = self.local_network.run_value(sess, state)
+            R = self.local_network.get_value(sess, state)
 
         R_batch = np.zeros(self.local_t - self.local_t_start)
 
@@ -119,12 +101,11 @@ class Agent(object):
             R = rewards[i - self.local_t_start] + GAMMA * R
             R_batch[i - self.local_t_start] = R
 
-        sess.run(self.grads, feed_dict={
+        sess.run(self.apply_gradients, feed_dict={
             self.local_network.s: states,
             self.local_network.a: actions,
-            self.local_network.r: R_batch})
-
-        sess.run(self.apply_gradients, feed_dict={self.lr_in: self.learning_rate})
+            self.local_network.r: R_batch,
+            self.lr_in: self.learning_rate})
 
         if self.local_t % 100 == 0:
             print('thread_id: {0} | local_t: {1}'.format(self.thread_index, self.local_t))
