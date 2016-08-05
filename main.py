@@ -2,12 +2,8 @@
 
 import os
 import gym
-import random
-import numpy as np
 import tensorflow as tf
 from threading import Thread
-from skimage.color import rgb2gray
-from skimage.transform import resize
 
 from network import A3CFF
 from agent import Agent
@@ -17,7 +13,7 @@ FRAME_HEIGHT = 84
 STATE_LENGTH = 4
 NO_OP_STEPS = 30
 ENV_NAME = 'Breakout-v0'
-NUM_THREADS = 1
+NUM_THREADS = 2
 GLOBAL_T_MAX = 10000000
 RMSP_ALPHA = 0.99
 RMSP_EPSILON = 0.1
@@ -35,42 +31,16 @@ def load_network(sess, saver):
         print('Training new network...')
 
 
-def get_initial_state(observation, last_observation):
-    processed_observation = np.maximum(observation, last_observation)
-    processed_observation = resize(rgb2gray(processed_observation), (FRAME_WIDTH, FRAME_HEIGHT))
-    state = [processed_observation for _ in range(STATE_LENGTH)]
-    return np.stack(state, axis=2)
-
-
-def actor_learner_thread(thread_index, agent, sess, saver, env):
-    global global_t
-    global_t = 0
-
-    while global_t < GLOBAL_T_MAX:
-        terminal = False
-        observation = env.reset()
-        for _ in range(random.randint(1, NO_OP_STEPS)):
-            last_observation = observation
-            observation, _, _, _ = env.step(0)  # Do nothing
-        state = get_initial_state(observation, last_observation)
-
-        diff_global_t = agent.process(sess, global_t, env, state, terminal, last_observation)
-        global_t += diff_global_t
-
-
 def main():
     envs = [gym.make(ENV_NAME) for _ in range(NUM_THREADS)]
-    num_actions = envs[0].action_space.n
 
+    num_actions = envs[0].action_space.n
     global_network = A3CFF(num_actions)
 
-    lr_in = tf.placeholder(tf.float32)
-    optimizer = tf.train.RMSPropOptimizer(learning_rate=lr_in, decay=RMSP_ALPHA, momentum=0.0, epsilon=RMSP_EPSILON)
+    lr_input = tf.placeholder(tf.float32)
+    optimizer = tf.train.RMSPropOptimizer(lr_input, decay=RMSP_ALPHA, epsilon=RMSP_EPSILON)
 
-    agents = []
-    for i in range(NUM_THREADS):
-        agent = Agent(i, num_actions, global_network, lr_in, optimizer)
-        agents.append(agent)
+    agents = [Agent(i, num_actions, global_network, lr_input, optimizer) for i in range(NUM_THREADS)]
 
     sess = tf.InteractiveSession()
     saver = tf.train.Saver(global_network.get_vars())
@@ -85,7 +55,9 @@ def main():
 
     actor_learner_threads = []
     for i in range(NUM_THREADS):
-        actor_learner_threads.append(Thread(target=actor_learner_thread, args=(i, agents[i], sess, saver, envs[i])))
+        env = envs[i]
+        agent = agents[i]
+        actor_learner_threads.append(Thread(target=agent.actor_learner_thread, args=(env, sess, saver)))
 
     for thread in actor_learner_threads:
         thread.start()
