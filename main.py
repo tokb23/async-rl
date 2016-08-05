@@ -13,11 +13,12 @@ FRAME_HEIGHT = 84
 STATE_LENGTH = 4
 NO_OP_STEPS = 30
 ENV_NAME = 'Breakout-v0'
-NUM_THREADS = 2
+NUM_THREADS = 3
 GLOBAL_T_MAX = 10000000
 RMSP_ALPHA = 0.99
 RMSP_EPSILON = 0.1
 SAVE_NETWORK_PATH = 'saved_networks/' + ENV_NAME
+SAVE_SUMMARY_PATH = 'summary/' + ENV_NAME
 LOAD_NETWORK = False
 DISPLAY = False
 
@@ -29,6 +30,20 @@ def load_network(sess, saver):
         print('Successfully loaded: ' + checkpoint.model_checkpoint_path)
     else:
         print('Training new network...')
+
+
+def setup_summary():
+    episode_total_reward = tf.Variable(0.)
+    tf.scalar_summary(ENV_NAME + '/Total Reward/Episode', episode_total_reward)
+    episode_duration = tf.Variable(0.)
+    tf.scalar_summary(ENV_NAME + '/Duration/Episode', episode_duration)
+    episode_avg_loss = tf.Variable(0.)
+    tf.scalar_summary(ENV_NAME + '/Average Loss/Episode', episode_avg_loss)
+    summary_vars = [episode_total_reward, episode_duration, episode_avg_loss]
+    summary_placeholders = [tf.placeholder(tf.float32) for _ in range(len(summary_vars))]
+    update_ops = [summary_vars[i].assign(summary_placeholders[i]) for i in range(len(summary_vars))]
+    summary_op = tf.merge_all_summaries()
+    return summary_placeholders, update_ops, summary_op
 
 
 def main():
@@ -44,6 +59,8 @@ def main():
 
     sess = tf.InteractiveSession()
     saver = tf.train.Saver(global_network.get_vars())
+    summary_placeholders, update_ops, summary_op = setup_summary()
+    summary_writer = tf.train.SummaryWriter(SAVE_SUMMARY_PATH, sess.graph)
 
     if not os.path.exists(SAVE_NETWORK_PATH):
         os.makedirs(SAVE_NETWORK_PATH)
@@ -57,7 +74,7 @@ def main():
     for i in range(NUM_THREADS):
         env = envs[i]
         agent = agents[i]
-        actor_learner_threads.append(Thread(target=agent.actor_learner_thread, args=(env, sess, saver)))
+        actor_learner_threads.append(Thread(target=agent.actor_learner_thread, args=(env, sess, saver, summary_placeholders, update_ops, summary_op, summary_writer)))
 
     for thread in actor_learner_threads:
         thread.start()

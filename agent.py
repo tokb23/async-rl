@@ -1,5 +1,6 @@
 # coding:utf-8
 
+import time
 import random
 import numpy as np
 import tensorflow as tf
@@ -8,6 +9,7 @@ from skimage.transform import resize
 
 from network import A3CFF
 
+ENV_NAME = 'Breakout-v0'
 FRAME_WIDTH = 84
 FRAME_HEIGHT = 84
 STATE_LENGTH = 4
@@ -18,6 +20,8 @@ INITIAL_LEARNING_RATE = 0.007
 GLOBAL_T_MAX = 10000000
 NO_OP_STEPS = 30
 ACTION_INTERVAL = 4
+SAVE_INTERVAL = 500000
+SAVE_NETWORK_PATH = 'saved_networks/' + ENV_NAME
 
 
 class Agent(object):
@@ -81,15 +85,35 @@ class Agent(object):
 
         return loss
 
-    def actor_learner_thread(self, env, sess, saver):
-        global global_t, learning_rate
+    def save_network(self, sess, saver, global_t):
+        save_path = saver.save(sess, SAVE_NETWORK_PATH + '/' + ENV_NAME, global_step=global_t)
+        print('Successfully saved: ' + save_path)
+
+    def write_summary(self, sess, total_reward, duration, global_episode, total_loss, summary_placeholders, update_ops, summary_op, summary_writer):
+        stats = [total_reward, duration, sum(total_loss) / len(total_loss)]
+        for i in range(len(stats)):
+            sess.run(update_ops[i], feed_dict={
+                summary_placeholders[i]: float(stats[i])
+            })
+        summary_str = sess.run(summary_op)
+        summary_writer.add_summary(summary_str, global_episode + 1)
+
+    def actor_learner_thread(self, env, sess, saver, summary_placeholders, update_ops, summary_op, summary_writer):
+        global global_t, learning_rate, global_episode
         global_t = 0
         local_t = 0
         learning_rate = INITIAL_LEARNING_RATE
         lr_step = INITIAL_LEARNING_RATE / GLOBAL_T_MAX
         repeated_action = 0
 
+        total_reward = 0
         total_loss = []
+        duration = 0
+        global_episode = 0
+        local_episode = 0
+
+        # Delay
+        time.sleep(3 * self.thread_id)
 
         terminal = False
         observation = env.reset()
@@ -125,6 +149,9 @@ class Agent(object):
                 local_t += 1
                 global_t += 1
 
+                total_reward += reward
+                duration += 1
+
                 # Anneal learning rate linearly over time
                 learning_rate -= lr_step
                 if learning_rate < 0.0:
@@ -136,9 +163,18 @@ class Agent(object):
             total_loss.append(loss)
 
             if terminal:
-                print('THREAD: {0:2d} / LOCAL_TIME: {1:8d} / GLOBAL_TIME: {2:10d} / LEARNING_RATE: {3:.8f} / AVG_LOSS: {4:.5f}'.format(self.thread_id, local_t, global_t, learning_rate, sum(total_loss) / len(total_loss)))
+                # Write summary
+                self.write_summary(sess, total_reward, duration, global_episode, total_loss, summary_placeholders, update_ops, summary_op, summary_writer)
 
+                # Debug
+                print('THREAD: {0:2d} / GLOBAL_EPISODE: {1:6d} / GLOBAL_TIME: {2:10d} / LOCAL_EPISODE: {3:4d} / LOCAL_TIME: {4:8d} / DURATION: {5:5d} / TOTAL_REWARD: {6:3.0f} / AVG_LOSS: {7:.5f} / LEARNING_RATE: {8:.8f}'.format(
+                    self.thread_id + 1, global_episode + 1, global_t, local_episode + 1, local_t, duration, total_reward, sum(total_loss) / len(total_loss), learning_rate))
+
+                total_reward = 0
                 total_loss = []
+                duration = 0
+                local_episode += 1
+                global_episode += 1
 
                 terminal = False
                 observation = env.reset()
@@ -146,3 +182,7 @@ class Agent(object):
                     last_observation = observation
                     observation, _, _, _ = env.step(0)  # Do nothing
                 state = self.get_initial_state(observation, last_observation)
+
+            # Save network
+            if global_t % SAVE_INTERVAL == 0:
+                self.save_network(sess, saver, global_t)
