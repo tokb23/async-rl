@@ -14,8 +14,8 @@ from constant import RMSP_ALPHA
 from constant import RMSP_EPSILON
 from constant import SAVE_NETWORK_PATH
 from constant import SAVE_SUMMARY_PATH
-from constant import LOAD_NETWORK = False
-from constant import DISPLAY = False
+from constant import LOAD_NETWORK
+from constant import DISPLAY
 
 
 def load_network(sess, saver):
