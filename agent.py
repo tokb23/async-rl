@@ -166,7 +166,7 @@ class Agent(object):
                 self.write_summary(sess, total_reward, duration, global_episode, total_loss, summary_placeholders, update_ops, summary_op, summary_writer)
 
                 # Debug
-                print('THREAD: {0:2d} / GLOBAL_EPISODE: {1:6d} / GLOBAL_TIME: {2:10d} / LOCAL_EPISODE: {3:4d} / LOCAL_TIME: {4:8d} / DURATION: {5:5d} / TOTAL_REWARD: {6:3.0f} / AVG_LOSS: {7:.5f} / LEARNING_RATE: {8:.8f}'.format(
+                print('THREAD: {0:2d} / GLOBAL_EPISODE: {1:6d} / GLOBAL_TIME: {2:10d} / LOCAL_EPISODE: {3:4d} / LOCAL_TIME: {4:8d} / DURATION: {5:5d} / TOTAL_REWARD: {6:3.0f} / AVG_LOSS: {7:.5f} / LEARNING_RATE: {8:.10f}'.format(
                     self.thread_id + 1, global_episode + 1, global_t, local_episode + 1, local_t, duration, total_reward, sum(total_loss) / len(total_loss), learning_rate))
 
                 total_reward = 0
@@ -183,5 +183,5 @@ class Agent(object):
                 state = self.get_initial_state(observation, last_observation)
 
             # Save network
-            if global_t % SAVE_INTERVAL == 0:
+            if global_t % SAVE_INTERVAL < 10:
                 self.save_network(sess, saver, global_t)
