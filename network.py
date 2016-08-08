@@ -14,19 +14,20 @@ class Network(object):
         self.num_actions = num_actions
 
     def build_training_op(self):
-        self.a = tf.placeholder(tf.int64, [None])
+        self.a = tf.placeholder(tf.int32, [None])
         self.r = tf.placeholder(tf.float32, [None])
 
         # Convert action to one hot vector
         a_one_hot = tf.one_hot(self.a, self.num_actions, 1.0, 0.0)
 
         # Avoid NaN by clipping pi when its values become zero
-        log_pi = tf.reduce_sum(tf.mul(tf.log(tf.clip_by_value(self.pi, 1e-20, 1.0)), a_one_hot), reduction_indices=1)
-        entropy = -tf.reduce_sum(self.pi * tf.log(tf.clip_by_value(self.pi, 1e-20, 1.0)), reduction_indices=1)
+        log_pi = tf.log(tf.clip_by_value(self.pi, 1e-20, 1.0))
+
+        entropy = -tf.reduce_sum(self.pi * log_pi, reduction_indices=1)
 
         advantage = self.r - self.v
 
-        p_loss = -(log_pi * advantage + ENTROPY_BETA * entropy)
+        p_loss = -(tf.reduce_sum(tf.mul(log_pi, a_one_hot), reduction_indices=1) * advantage + ENTROPY_BETA * entropy)
         v_loss = tf.square(advantage)
         self.loss = tf.reduce_mean(p_loss + 0.5 * v_loss)
 
@@ -104,7 +105,7 @@ class A3CFF(Network):
 
     def get_v(self, sess, state):
         v_out = sess.run(self.v, feed_dict={self.s: [state]})
-        return v_out[0]
+        return v_out[0][0]
 
     def get_vars(self):
         return [self.W_conv1, self.b_conv1, self.W_conv2, self.b_conv2, self.W_fc1, self.b_fc1, self.W_fc2, self.b_fc2, self.W_fc3, self.b_fc3]

@@ -1,6 +1,5 @@
 # coding:utf-8
 
-import time
 import random
 import numpy as np
 import tensorflow as tf
@@ -52,7 +51,8 @@ class Agent(object):
             # Subtract a tiny value from probabilities in order to avoid 'ValueError: sum(pvals[:-1]) > 1.0' in np.random.multinomial
             pi = pi - np.finfo(np.float32).epsneg
 
-            action = np.nonzero(np.random.multinomial(1, pi))[0][0]
+            histogram = np.random.multinomial(1, pi)
+            action = int(np.nonzero(histogram)[0])
 
             repeated_action = action
 
@@ -111,9 +111,6 @@ class Agent(object):
         global_episode = 0
         local_episode = 0
 
-        # Delay
-        time.sleep(3 * self.thread_id)
-
         terminal = False
         observation = env.reset()
         for _ in range(random.randint(1, NO_OP_STEPS)):
@@ -162,12 +159,13 @@ class Agent(object):
             total_loss.append(loss)
 
             if terminal:
-                # Write summary
-                self.write_summary(sess, total_reward, duration, global_episode, total_loss, summary_placeholders, update_ops, summary_op, summary_writer)
+                if self.thread_id == 0:
+                    # Write summary
+                    self.write_summary(sess, total_reward, duration, global_episode, total_loss, summary_placeholders, update_ops, summary_op, summary_writer)
 
                 # Debug
                 print('THREAD: {0:2d} / GLOBAL_EPISODE: {1:6d} / GLOBAL_TIME: {2:10d} / LOCAL_EPISODE: {3:4d} / LOCAL_TIME: {4:8d} / DURATION: {5:5d} / TOTAL_REWARD: {6:3.0f} / AVG_LOSS: {7:.5f} / LEARNING_RATE: {8:.10f}'.format(
-                    self.thread_id + 1, global_episode + 1, global_t, local_episode + 1, local_t, duration, total_reward, sum(total_loss) / len(total_loss), learning_rate))
+                    self.thread_id, global_episode + 1, global_t, local_episode + 1, local_t, duration, total_reward, sum(total_loss) / len(total_loss), learning_rate))
 
                 total_reward = 0
                 total_loss = []
@@ -183,5 +181,5 @@ class Agent(object):
                 state = self.get_initial_state(observation, last_observation)
 
             # Save network
-            if global_t % SAVE_INTERVAL < 10:
+            if global_t % SAVE_INTERVAL == 0:
                 self.save_network(sess, saver, global_t)
