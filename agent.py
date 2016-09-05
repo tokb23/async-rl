@@ -16,7 +16,6 @@ from constant import GLOBAL_T_MAX
 from constant import LOCAL_T_MAX
 from constant import GAMMA
 from constant import INITIAL_LEARNING_RATE
-from constant import ACTION_INTERVAL
 from constant import NO_OP_STEPS
 from constant import SAVE_INTERVAL
 from constant import SAVE_NETWORK_PATH
@@ -31,7 +30,7 @@ class Agent(object):
         self.local_network.build_training_op()
 
         get_grads = tf.gradients(self.local_network.loss, self.local_network.get_vars())
-        grads_and_vars = list(zip(get_grads, global_network.get_vars()))
+        grads_and_vars = zip(get_grads, global_network.get_vars())
         self.grads_update = optimizer.apply_gradients(grads_and_vars)
 
         self.sync_op = self.local_network.sync_with(global_network)
@@ -42,21 +41,16 @@ class Agent(object):
         state = [processed_observation for _ in range(STATE_LENGTH)]
         return np.stack(state, axis=2)
 
-    def get_action(self, sess, state, repeated_action, local_t):
-        action = repeated_action
+    def get_action(self, sess, state, local_t):
+        pi = self.local_network.get_pi(sess, state)
 
-        if local_t % ACTION_INTERVAL == 0:
-            pi = self.local_network.get_pi(sess, state)
+        # Subtract a tiny value from probabilities in order to avoid 'ValueError: sum(pvals[:-1]) > 1.0' in np.random.multinomial
+        pi = pi - np.finfo(np.float32).epsneg
 
-            # Subtract a tiny value from probabilities in order to avoid 'ValueError: sum(pvals[:-1]) > 1.0' in np.random.multinomial
-            pi = pi - np.finfo(np.float32).epsneg
+        histogram = np.random.multinomial(1, pi)
+        action = int(np.nonzero(histogram)[0])
 
-            histogram = np.random.multinomial(1, pi)
-            action = int(np.nonzero(histogram)[0])
-
-            repeated_action = action
-
-        return action, repeated_action
+        return action
 
     def preprocess(self, observation, last_observation):
         processed_observation = np.maximum(observation, last_observation)
@@ -103,7 +97,6 @@ class Agent(object):
         local_t = 0
         learning_rate = INITIAL_LEARNING_RATE
         lr_step = INITIAL_LEARNING_RATE / GLOBAL_T_MAX
-        repeated_action = 0
 
         total_reward = 0
         total_loss = []
@@ -130,7 +123,7 @@ class Agent(object):
             while not (terminal or ((local_t - local_t_start) == LOCAL_T_MAX)):
                 last_observation = observation
 
-                action, repeated_action = self.get_action(sess, state, repeated_action, local_t)
+                action = self.get_action(sess, state, local_t)
 
                 observation, reward, terminal, _ = env.step(action)
 
