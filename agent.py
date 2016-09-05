@@ -1,5 +1,6 @@
 # coding:utf-8
 
+import time
 import random
 import numpy as np
 import tensorflow as tf
@@ -19,6 +20,7 @@ from constant import INITIAL_LEARNING_RATE
 from constant import NO_OP_STEPS
 from constant import SAVE_INTERVAL
 from constant import SAVE_NETWORK_PATH
+from constant import LOG_INTERVAL
 
 
 class Agent(object):
@@ -104,6 +106,11 @@ class Agent(object):
         global_episode = 0
         local_episode = 0
 
+        pre_global_t_save = 0
+        pre_global_t_log = 0
+
+        start_time = time.time()
+
         terminal = False
         observation = env.reset()
         for _ in range(random.randint(1, NO_OP_STEPS)):
@@ -174,5 +181,13 @@ class Agent(object):
                 state = self.get_initial_state(observation, last_observation)
 
             # Save network
-            if global_t % SAVE_INTERVAL == 0:
+            if (self.thread_id == 0) and (global_t - pre_global_t_save >= SAVE_INTERVAL):
+                pre_global_t_save = global_t
                 self.save_network(sess, saver, global_t)
+
+            # Show performance
+            if (self.thread_id == 0) and (global_t - pre_global_t_log >= LOG_INTERVAL):
+                pre_global_t_log = global_t
+                elapsed_time = time.time() - start_time
+                steps_per_sec = global_t / elapsed_time
+                print('##### PERFORMANCE: {0:3d} steps in {1:.0f} sec => {2:.0f} steps/sec, {3:.2f}M steps/hour'.format(global_t, elapsed_time, steps_per_sec, steps_per_sec * 3600 / 1000000.))
