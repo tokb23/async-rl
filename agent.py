@@ -21,6 +21,7 @@ from constant import NO_OP_STEPS
 from constant import SAVE_INTERVAL
 from constant import SAVE_NETWORK_PATH
 from constant import LOG_INTERVAL
+from constant import CLIP_NORM
 
 
 class Agent(object):
@@ -32,6 +33,8 @@ class Agent(object):
         self.local_network.build_training_op()
 
         get_grads = tf.gradients(self.local_network.loss, self.local_network.get_vars())
+        for i, grad in enumerate(get_grads):
+            get_grads[i] = tf.clip_by_norm(grad, CLIP_NORM)
         grads_and_vars = zip(get_grads, global_network.get_vars())
         self.grads_update = optimizer.apply_gradients(grads_and_vars)
 
